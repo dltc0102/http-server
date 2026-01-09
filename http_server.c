@@ -10,67 +10,12 @@
 
 int main()
 {
-    // open an html file to serve
-    FILE *html_data;
-    html_data = fopen("./index.html", "r");
-    if (html_data == NULL)
-    {
-        perror("Failed to open index.html");
-        exit(1);
-    }
-
-    // get html file size
-    fseek(html_data, 0, SEEK_END);
-    long file_size = ftell(html_data);
-    fseek(html_data, 0, SEEK_SET);
-
-    // allocate memory for html file size
-    char *file_content = malloc(file_size + 1);
-    if (file_content == NULL)
-    {
-        perror("Memory allocation failed");
-        fclose(html_data);
-        exit(1);
-    }
-
-    // Read entire file
-    size_t bytes_read = fread(file_content, 1, file_size, html_data);
-    // file_content[bytes_read] = '\0';
-    fclose(html_data);
-
-    // create http response with headers
-    char http_header[BUFFER_SIZE];
-    snprintf(http_header, sizeof(http_header),
-             "HTTP/1.1 200 OK\r\n"
-             "Server: Simple C Server\r\n"
-             "Content-Type: text/html\r\n"
-             "Connection: close\r\n"
-             "Content-Length: %ld\r\n\r\n",
-             bytes_read);
-
-    // get http response size
-    size_t header_len = strlen(http_header);
-    size_t total_len = header_len + bytes_read;
-    char *response = malloc(total_len + 1);
-    if (response == NULL)
-    {
-        perror("Response allocation failed");
-        free(file_content);
-        exit(1);
-    }
-
-    // Combine header and content
-    strcpy(response, http_header);
-    strcat(response, file_content);
-
     // create a socket
     int server_socket;
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket < 0)
     {
         perror("Socket creation failed");
-        free(file_content);
-        free(response);
         exit(1);
     }
 
@@ -92,8 +37,6 @@ int main()
     {
         perror("Bind failed");
         close(server_socket);
-        free(file_content);
-        free(response);
         exit(1);
     }
 
@@ -103,8 +46,6 @@ int main()
     {
         perror("Listen failed");
         close(server_socket);
-        free(file_content);
-        free(response);
         exit(1);
     }
 
@@ -112,11 +53,11 @@ int main()
 
     // accept connections
     int client_socket;
-    struct sockaddr_in client_addr;
-    socklen_t addr_len = sizeof(client_addr);
+    char request_buffer[BUFFER_SIZE];
+
     while (1)
     {
-        client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &addr_len);
+        client_socket = accept(server_socket, NULL, NULL);
         if (client_socket < 0)
         {
             perror("Accept failed");
@@ -124,7 +65,23 @@ int main()
         }
         printf("Client connected\n");
 
-        send(client_socket, response, total_len, 0);
+        // read request
+        int bytes_received = recv(client_socket, request_buffer, sizeof(request_buffer), 0);
+        if (bytes_received <= 0)
+        {
+            close(client_socket);
+            continue;
+        }
+        request_buffer[bytes_received] = '\0';
+        puts(request_buffer);
+
+        char *response =
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: text/html\r\n"
+            "\r\n"
+            "<h1>Hello from server!</h1>";
+
+        send(client_socket, response, strlen(response), 0);
         close(client_socket);
     }
     return 0;
